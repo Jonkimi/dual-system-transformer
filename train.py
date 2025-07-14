@@ -11,10 +11,8 @@ from load_dataset import dataset
 # 1. 初始化
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 TOKENIZER = BertTokenizer.from_pretrained(BERT_MODEL_NAME)
-# MODEL = ConceptualBottleneckAutoencoder().to(DEVICE)
+MODEL = ConceptualBottleneckAutoencoder().to(DEVICE)
 
-NUM_CONCEPTS = 8  # 提取的局部概念数量
-MODEL = CombinedConceptAutoencoder(num_concepts=NUM_CONCEPTS).to(DEVICE)
 LEARNING_RATE = 5e-5
 EPOCHS = 100 # 对于小数据集，多训练几轮
 BATCH_SIZE = 128
@@ -96,13 +94,15 @@ for epoch in range(EPOCHS):
     avg_loss = total_loss / len(dataloader)
     print(f"Epoch {epoch+1}/{EPOCHS}, Loss: {avg_loss:.4f}")
 
+MODEL_SAVE_PATH="conceptual_autoencoder.pth"
+
 # 5. 保存模型和验证
 print("训练完成，正在保存模型...")
-torch.save(MODEL.state_dict(), "conceptual_autoencoder.pth")
+torch.save(MODEL.state_dict(), MODEL_SAVE_PATH)
 
 print("\n--- 开始验证 ---")
 # 加载已保存的模型权重
-MODEL.load_state_dict(torch.load("conceptual_autoencoder.pth"))
+MODEL.load_state_dict(torch.load(MODEL_SAVE_PATH))
 
 # 5. 验证结果
 print("\n--- 开始验证 ---")
