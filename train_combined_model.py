@@ -12,13 +12,13 @@ from model import CombinedConceptAutoencoder
 # --- 2. 数据准备部分 ---
 
 from load_dataset import dataset
-
+MODEL_SAVE_PATH = "combined_concept_autoencoder.pth"
 # --- 3. 训练主逻辑 ---
 
 if __name__ == '__main__':
     # 超参数设置
     DATA_FILE = "sentences_nli_zh.txt"
-    MODEL_SAVE_PATH = "combined_concept_autoencoder.pth"
+
     NUM_CONCEPTS = 8  # 提取的局部概念数量
     LEARNING_RATE = 1e-4 # 可以比之前稍高一些
     EPOCHS = 100 # 使用大数据集，少量epoch即可看到效果
