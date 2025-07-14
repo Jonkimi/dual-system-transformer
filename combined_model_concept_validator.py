@@ -5,6 +5,7 @@ from scipy.spatial.distance import cosine
 from transformers import BertTokenizer
 from model import CombinedConceptAutoencoder
 from model import BERT_MODEL_NAME
+
 class ConceptValidator:
     def __init__(self, model_path, device):
         self.device = device
@@ -14,7 +15,7 @@ class ConceptValidator:
         self.tokenizer = BertTokenizer.from_pretrained(BERT_MODEL_NAME)
         
         # 2. 加载您训练好的模型结构和权重
-        self.model = CombinedConceptAutoencoder().to(self.device)
+        self.model = CombinedConceptAutoencoder(num_concepts=8).to(self.device)
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval() # 切换到评估模式，这会禁用dropout等
         print("模型加载成功！")
