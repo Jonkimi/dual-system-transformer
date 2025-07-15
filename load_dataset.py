@@ -19,7 +19,20 @@ def load_sentences_from_file(filepath="./datasets/train/sentences_for_training.t
         # 读取所有行，去除首尾空格，并过滤掉空行，限制读取一万行
         sentences = [line.strip() for line in f if line.strip()]
 
-    return sentences[:2000]
+    # return sentences[:20000]
+    return sentences
+
+def load_wiki_sentences_from_file(filepath="datasets/wiki_sentences_for_training_500k.txt"):
+    """从文件加载wiki句子列表"""
+    print(f"正在从 '{filepath}' 加载wiki数据集...")
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            sentences = [line.strip() for line in f if line.strip()]
+        print(f"成功加载 {len(sentences)} 条wiki句子。")
+        return sentences
+    except FileNotFoundError:
+        print(f"警告: wiki句子文件 '{filepath}' 未找到。返回空列表。")
+        return []
 
 class SentenceDataset(Dataset):
     def __init__(self, sentences):
@@ -42,6 +55,9 @@ sentences +=[
     "我喜欢阅读科幻小说和看电影。",
     "这个模型的想法非常具有创新性。",
 ]
+
+wiki_sentences = load_wiki_sentences_from_file()
+sentences += wiki_sentences
 
 print(f"加载了 {len(sentences)} 条句子用于训练。")
 dataset = SentenceDataset(sentences)

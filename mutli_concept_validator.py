@@ -111,7 +111,7 @@ class MultiConceptValidator:
         # 绘制热力图
         plt.figure(figsize=(12, 6))
         # 使用中文字体
-        plt.rcParams['font.sans-serif'] = ['SimHei']
+        plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei']
         plt.rcParams['axes.unicode_minus'] = False
 
         sns.heatmap(attn_weights, xticklabels=tokens, yticklabels=[f"概念_{i+1}" for i in range(attn_weights.shape[0])], cmap="viridis")

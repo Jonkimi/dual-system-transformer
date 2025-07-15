@@ -21,9 +21,9 @@ if __name__ == '__main__':
 
     NUM_CONCEPTS = 8  # 提取的局部概念数量
     LEARNING_RATE = 1e-4 # 可以比之前稍高一些
-    EPOCHS = 100 # 使用大数据集，少量epoch即可看到效果
-    BATCH_SIZE = 64 # 根据你的GPU显存调整
-    MAX_SENTENCE_LEN = 128 # 限制句子长度以节省显存
+    EPOCHS = 50 # 使用大数据集，少量epoch即可看到效果
+    BATCH_SIZE = 256 # 根据你的GPU显存调整
+    MAX_SENTENCE_LEN = 256 # 限制句子长度以节省显存
     BERT_MODEL_NAME='hfl/chinese-bert-wwm-ext'
     # BERT_MODEL_NAME='bert-base-chinese'
 

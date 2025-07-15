@@ -138,7 +138,7 @@ class CombinedConceptAutoencoder(nn.Module):
     """
     结合了全局[CLS]向量和多个局部概念向量的自编码器模型。
     """
-    def __init__(self, num_concepts=5, bert_model_name=BERT_MODEL_NAME, decoder_layers=3, hidden_dim=768, num_heads=8):
+    def __init__(self, num_concepts=5, bert_model_name=BERT_MODEL_NAME, decoder_layers=6, hidden_dim=768, num_heads=8):
         super().__init__()
         # 系统1: BERT 编码器
         print("正在初始化BERT编码器...")
@@ -220,3 +220,146 @@ class CombinedConceptAutoencoder(nn.Module):
                     break
         
         return tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+
+class CombinedConceptAutoencoderV2(nn.Module):
+    """
+    结合了全局[CLS]向量和多个局部概念向量的自编码器模型。
+    """
+    def __init__(self, num_concepts=16, concept_encoder_layers=6, bert_model_name=BERT_MODEL_NAME, decoder_layers=6, hidden_dim=768, num_heads=8):
+        super().__init__()
+        # 系统1: BERT 编码器
+        print("正在初始化BERT编码器...")
+        self.encoder = BertModel.from_pretrained(bert_model_name)
+        # 冻结BERT的所有参数
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+            
+        self.vocab_size = self.encoder.config.vocab_size
+        
+        # 多概念提取头
+    # 系统1b: 高级概念编码器 (核心创新)
+        print(f"初始化高级ConceptEncoder ({concept_encoder_layers}层, {num_concepts}类概念)...")
+        self.concept_encoder = ConceptEncoder(
+            num_concepts=num_concepts, 
+            num_layers=concept_encoder_layers, # 例如，使用4层
+            hidden_dim=768, 
+            num_heads=8
+        )
+        # 系统2: Transformer 解码器
+        print(f"正在初始化Transformer解码器 ({decoder_layers} 层)...")
+        self.decoder_embedding = nn.Embedding(self.vocab_size, hidden_dim)
+        decoder_layer = nn.TransformerDecoderLayer(d_model=hidden_dim, nhead=num_heads, batch_first=True)
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=decoder_layers)
+        self.output_layer = nn.Linear(hidden_dim, self.vocab_size)
+        print("模型初始化完成。")
+
+    def forward(self, src_input_ids, src_attention_mask, tgt_input_ids, tgt_attention_mask):
+        # 1. BERT编码
+        encoder_outputs = self.encoder(input_ids=src_input_ids, attention_mask=src_attention_mask)
+        bert_hidden_states = encoder_outputs.last_hidden_state
+        
+        # 2. 提取两种概念向量并拼接
+#         # memory 的形状是 (batch_size, num_concepts, 768)
+        memory = self.concept_encoder(bert_hidden_states)
+        
+        # 3. GPT解码
+        tgt_emb = self.decoder_embedding(tgt_input_ids)
+        tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt_input_ids.size(1)).to(tgt_input_ids.device)
+        
+        decoder_output = self.decoder(
+            tgt=tgt_emb, 
+            memory=memory, 
+            tgt_mask=tgt_mask,
+            tgt_key_padding_mask=~tgt_attention_mask.bool()
+        )
+        
+        logits = self.output_layer(decoder_output)
+        return logits
+
+    def reconstruct(self, sentence, tokenizer, max_len=50):
+        """用于推理和验证的函数"""
+        self.eval()
+        device = next(self.parameters()).device
+
+        with torch.no_grad():
+            # 1. 编码并提取组合概念
+            inputs = tokenizer(sentence, return_tensors='pt').to(device)
+            encoder_outputs = self.encoder(**inputs)
+            bert_hidden_states = encoder_outputs.last_hidden_state
+            
+            # global_concept_vector = bert_hidden_states[:, 0, :].unsqueeze(1)
+            # local_concept_vectors = self.concept_pooling(bert_hidden_states)
+            # memory = torch.cat([global_concept_vector, local_concept_vectors], dim=1)
+            memory = self.concept_encoder(bert_hidden_states)
+
+            # 2. 自回归生成
+            generated_ids = torch.LongTensor([[tokenizer.cls_token_id]]).to(device)
+
+            for _ in range(max_len - 1):
+                tgt_emb = self.decoder_embedding(generated_ids)
+                decoder_output = self.decoder(tgt=tgt_emb, memory=memory)
+                last_token_logits = self.output_layer(decoder_output[:, -1, :])
+                next_token_id = torch.argmax(last_token_logits, dim=-1)
+                
+                generated_ids = torch.cat([generated_ids, next_token_id.unsqueeze(0)], dim=1)
+
+                if next_token_id.item() == tokenizer.sep_token_id:
+                    break
+        
+        return tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+    
+class ConceptEncoder(nn.Module):
+    def __init__(self, num_concepts=8, num_layers=4, hidden_dim=768, num_heads=8):
+        """
+        一个多层的Transformer概念编码器。
+        
+        Args:
+            num_concepts (int): 您希望提取的固定概念数量 (k)。
+            num_layers (int): “研讨会”的轮数，即Encoder的层数。
+            hidden_dim (int): 模型的隐藏维度，应与BERT匹配。
+            num_heads (int): 多头注意力的头数。
+        """
+        super().__init__()
+        self.num_concepts = num_concepts
+
+        # 1. 初始化 k 个可学习的“专家”查询向量
+        self.concept_queries = nn.Parameter(torch.randn(1, num_concepts, hidden_dim))
+
+        # 2. 定义“研讨会”的核心流程
+        # 我们使用 TransformerDecoderLayer 因为它同时包含 self-attn 和 cross-attn
+        encoder_layer = nn.TransformerDecoderLayer(
+            d_model=hidden_dim, 
+            nhead=num_heads, 
+            batch_first=True,
+            dim_feedforward=hidden_dim * 4 # 通常是隐藏维度的4倍
+        )
+        
+        # 3. 将单层流程堆叠成多层
+        self.transformer_encoder = nn.TransformerDecoder(
+            decoder_layer=encoder_layer, 
+            num_layers=num_layers
+        )
+
+    def forward(self, bert_hidden_states):
+        """
+        前向传播。
+        
+        Args:
+            bert_hidden_states (Tensor): 来自BERT的输出, 形状 (batch_size, seq_len, hidden_dim)。
+        
+        Returns:
+            Tensor: 精炼后的概念向量集, 形状 (batch_size, num_concepts, hidden_dim)。
+        """
+        batch_size = bert_hidden_states.size(0)
+        
+        # 为批次中的每个样本准备查询向量
+        # 形状: (batch_size, num_concepts, hidden_dim)
+        queries = self.concept_queries.repeat(batch_size, 1, 1)
+
+        # 执行“研讨会”
+        # tgt (Target): 我们的查询向量，它将进行自我注意并被更新。
+        # memory (Memory): BERT的输出，作为只读的参考资料。
+        refined_concepts = self.transformer_encoder(tgt=queries, memory=bert_hidden_states)
+        
+        return refined_concepts
